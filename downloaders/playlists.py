@@ -1,5 +1,6 @@
 from pytube import YouTube, Playlist, Channel, exceptions
 import os
+import re
 from PIL import Image, ImageTk
 from tkinter import messagebox
 import shutil
@@ -9,15 +10,18 @@ import random
 from io import BytesIO
 
 
-class Video_Downloader:
+
+class Playlist_Downloader:
     def __init__(self, parent):
         self.PARENT = parent
         self.URL = ''
-        self.VIDEO = None
+        self.PLAYLIST = None
+        self.VIDEO_LIST = []
         self.DESCRIPTION = {}
         self.DIRECTORY = 'C:/Users/User/Downloads'
         self.FILENAME = ''
         self.STREAM = ''
+        self.REGEX = re.compile(r"\"url\":\"(/watch\?v=[\w-]*)")
         self.STREAM_DATA = {
             'mp4': [],
             'mp4v': [],
@@ -27,73 +31,63 @@ class Video_Downloader:
             }
     
     def validate_url(self, url):
-        if url == '' or url == 'Insert video URL':
+        if url == '' or url == 'Insert playlist URL':
             return 'empty'
         
+        playlist = Playlist(url)
         try:
-            vid = YouTube(url)
-            print(vid)
-        except exceptions.RegexMatchError:
+            if playlist.length == 0:
+                return 'unavailable'
+        except:
             return 'invalid'
         
-        try:
-            stream = vid.streams.get_lowest_resolution()
-            print(stream)
-        except exceptions.VideoPrivate:
-            return 'private'
-        except exceptions.AgeRestrictedError:
-            return 'age-restricted'
-        except exceptions.LiveStreamError:
-            return 'live'
-        except exceptions.VideoRegionBlocked:
-            return 'blocked'
-        except exceptions.VideoUnavailable:
-            return 'unavailable'
-        else:
-            self.URL = url
-            self.VIDEO = vid
-            print(self.URL)
-            return 'valid'
+        self.PLAYLIST = playlist
+        return 'valid'
+        
     
-    def get_video_description(self):
-        self.DESCRIPTION['title'] = self.VIDEO.title
+    def get_playlist_description(self):
+        self.DESCRIPTION['title'] = self.PLAYLIST.title
         self.FILENAME = self.DESCRIPTION['title']
-        self.DESCRIPTION['length'] = self.VIDEO.length
-        self.DESCRIPTION['author'] = self.VIDEO.author
-        self.DESCRIPTION['description'] = self.VIDEO.description
-        self.DESCRIPTION['thumbnail_url'] = self.VIDEO.thumbnail_url
+        self.DESCRIPTION['length'] = self.PLAYLIST.length
+        self.DESCRIPTION['owner'] = self.PLAYLIST.owner
+        self.DESCRIPTION['last_updated'] = self.PLAYLIST.last_updated
+        self.DESCRIPTION['views'] = self.PLAYLIST.views
+        
+        try:
+            if not self.PLAYLIST.description == 'simpleText':
+                self.DESCRIPTION['description'] = self.PLAYLIST.description
+            else:
+                self.DESCRIPTION['description'] = ''
+                pass
+        except:
+            self.DESCRIPTION['description'] = ''
+            pass
+
+        self.DESCRIPTION['videos'] = self.PLAYLIST.videos
         self.DESCRIPTION['random_id'] = self.generate_random_id(15)
-        self.DESCRIPTION['captions'] = self.VIDEO.captions
-        self.DESCRIPTION['captions_lang'] = []
-        self.DESCRIPTION['captions_codes'] = []
-        for a in self.DESCRIPTION['captions']:
-            self.DESCRIPTION['captions_lang'].append(a.name)
-            self.DESCRIPTION['captions_codes'].append(a.code)
         self.get_stream_data()
     
     def get_stream_data(self):
-        self.STREAM_DATA = {
-            'mp4': [],
-            'webm': [],
-            'mov': [],
-            'ogg': [],
-            '3gp': []
-            }
+        self.STREAM_FORMAT = ['mp4', 'mov', 'webm', 'wav', '3gp']
+        self.VIDEO_LIST = []
+        self.unavailable_videos = 0
         
-        for st in self.STREAM_DATA:
-            for stream in self.VIDEO.streams.filter(file_extension=st).order_by('filesize').desc():
-                print(stream)
+        for v in self.PLAYLIST.videos:
+            try:
                 a = {}
-                a['itag'] = stream.itag
-                a['type'] = stream.type
-                a['progressive'] = stream.is_progressive
-                if a['type'] == 'video':
-                    a['res'] = stream.resolution
-                    a['fps'] = stream.fps
-                else:
-                    a['bitrate'] = self.get_formatted_size(stream.bitrate, suffix='b') + 'ps'
-                a['filesize'] = self.get_formatted_size(stream.filesize)
-                self.STREAM_DATA[st].append(a)
+                a['video'] = v
+                a['title'] = v.title
+                a['author'] = v.author
+                a['length'] = v.length
+                self.VIDEO_LIST.append(a)
+            except :
+                self.unavailable_videos += 1
+                continue
+    
+    def retrieve_video_streams(self):
+        for v in self.PLAYLIST.videos:
+            pass
+
         
 
         
@@ -204,12 +198,7 @@ class Video_Downloader:
             else:
                 return False
         
-        return thumb_size, sub_size, caption
-        
-
-
-
-            
+        return thumb_size, sub_size, caption           
 
 
 
