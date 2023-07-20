@@ -278,7 +278,7 @@ class Videos_Tab(ttk.Frame):
                 self.url.set('')
         elif widget == 2:
             if self.filename.get() == '':
-                self.filename.set(self.vd.FILENAME)
+                self.filename.set(self.vd.FILENAME[0])
         elif widget == 3:
             i = self.directory.get()
             if i == '' or os.path.isdir(i) == False:
@@ -294,6 +294,7 @@ class Videos_Tab(ttk.Frame):
 
     def confirm_input(self):
         self.confirm_entry_button['state'] = ttk.DISABLED
+        self.download_button['state'] = ttk.DISABLED
         self.url_entry['state'] = ttk.DISABLED
         self.url_alert.config(text='')
         
@@ -331,6 +332,7 @@ class Videos_Tab(ttk.Frame):
                     self.url_alert['text'] = f"There's an error when accessing this video:\n{textwrap.shorten(str(e),width=60, placeholder='...')}\n Try checking your internet connection."
             
         self.confirm_entry_button['state'] = ttk.NORMAL
+        self.download_button['state'] = ttk.NORMAL
         self.url_entry['state'] = ttk.NORMAL
     
     def display_video_description(self):
@@ -349,7 +351,7 @@ class Videos_Tab(ttk.Frame):
         self.selected_itag = ''
         self.filename_entry['state'] = ttk.NORMAL
         self.directory_entry['state'] = ttk.NORMAL
-        self.filename.set(self.vd.FILENAME)
+        self.filename.set(self.vd.FILENAME[0])
         self.filename_entry.bind("<FocusOut>", lambda event: self.autofill_entry(2,0))
         self.directory_entry.bind("<FocusOut>", lambda event: self.autofill_entry(3,0))
         self.naming_check['state'] = ttk.NORMAL
@@ -433,9 +435,11 @@ class Videos_Tab(ttk.Frame):
     
     def prepare_download(self):
         self.download_button['state'] = ttk.DISABLED
-        self.vd.FILENAME = self.filename.get()
+        self.vd.FILENAME[0] = self.filename.get()
         self.vd.DIRECTORY = self.directory.get()
         config.IS_DOWNLOADING = True
+        if type(self.toplevel) == ttk.Toplevel:
+            self.toplevel.destroy()
         self.toplevel = Video_Toplevel(self)
     
 
@@ -482,7 +486,12 @@ class Video_Toplevel(ttk.Toplevel):
             self.update()
             threading.Thread(target=self.download, daemon=True).start()
 
-    
+    def close_window(self):
+        self.parent.download_button['state'] = ttk.NORMAL
+        config.IS_DOWNLOADING = False
+        self.destroy()
+
+
     def close_alert(self):
         i = messagebox.askyesno(
             title='Close Window',
@@ -490,9 +499,7 @@ class Video_Toplevel(ttk.Toplevel):
             parent = self
         )
         if i:
-            self.parent.download_button['state'] = ttk.NORMAL
-            config.IS_DOWNLOADING = False
-            self.destroy()
+            self.close_window()
     
     
     def prepare(self):
@@ -525,21 +532,6 @@ class Video_Toplevel(ttk.Toplevel):
 
     def download(self):
         try:
-            if self.parent.download_thumbnail.get():
-                self.status_label['text'] = 'Downloading thumbnail..'
-                with open(os.path.join(self.vd.DIRECTORY, 'thumbnail.png'), 'wb') as f:
-                    f.write(self.vd.DESCRIPTION['thumbnail_data'])
-                
-            if self.caption != '':
-                self.status_label['text'] = 'Downloading captions..'
-                if self.parent.caption_is_srt.get():
-                    with open(os.path.join(self.vd.DIRECTORY, 'captions.srt'), 'w', encoding='utf-8') as f:
-                        f.write(self.caption)
-                else:
-                    with open(os.path.join(self.vd.DIRECTORY, 'captions.xml'), 'w', encoding='utf-8') as f:
-                        f.write(self.caption)
-        
-
             self.start_download_time = datetime.now()
             def on_progress_callback(stream, chunk, bytes_remaining):
                 total_size = stream.filesize
@@ -558,7 +550,7 @@ class Video_Toplevel(ttk.Toplevel):
             stream = self.vd.VIDEO.streams.get_by_itag(int(self.parent.selected_itag))
 
             self.status_label['text'] = 'Downloading video..'
-            stream.download(filename=self.vd.FILENAME, output_path=self.vd.DIRECTORY)
+            stream.download(filename=self.vd.FILENAME[0], output_path=self.vd.DIRECTORY)
         
         except Exception as e:
             messagebox.showerror(

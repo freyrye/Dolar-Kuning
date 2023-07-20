@@ -338,6 +338,7 @@ class Playlist_Tab(ttk.Frame):
 
     def confirm_input(self):
         self.confirm_entry_button['state'] = ttk.DISABLED
+        self.download_button['state'] = ttk.DISABLED
         self.url_entry['state'] = ttk.DISABLED
         self.url_alert.config(text='')
         
@@ -363,6 +364,7 @@ class Playlist_Tab(ttk.Frame):
             
             
         self.confirm_entry_button['state'] = ttk.NORMAL
+        self.download_button['state'] = ttk.NORMAL
         self.url_entry['state'] = ttk.NORMAL
     
     def display_playlist_description(self):
@@ -390,9 +392,12 @@ class Playlist_Tab(ttk.Frame):
         self.directory_button['state'] = ttk.NORMAL
         self.directory_entry['state'] = ttk.NORMAL
         self.create_folder_check['state'] = ttk.NORMAL
+        self.download_button['state'] = ttk.NORMAL
         self.custom_res_slider.set(0)
         self.change_list_items()
         self.display_scale_value(0)
+
+        #self.toplevel = Video_Toplevel(self)
 
     
 
@@ -422,7 +427,8 @@ class Playlist_Tab(ttk.Frame):
         print(selection)
         
         for i in selection:
-            self.selected_videos.append(self.playlist_list.item(item=selection[selection.index(i)], option='values'))
+            a = (self.playlist_list.item(item=selection[selection.index(i)], option='values')[0], selection.index(i))
+            self.selected_videos.append(a)
             
         print(self.selected_videos)
 
@@ -446,40 +452,72 @@ class Video_Toplevel(ttk.Toplevel):
         self.caption = ''
         self.vd = parent.vd
 
-        if parent.download_thumbnail.get():
-            img = parent.thumbnail_image['image']
-        else:
-            img = parent.thumbnail_image.image
-        
-        self.main_frame = ttk.Labelframe(self, text= 'Download Details', padding=10)
-        self.thumbnail_size_label = ttk.Label(self.main_frame, text='Thumbnail: -')
-        self.thumbnail_image = ttk.Label(self.main_frame)
-        self.thumbnail_image['image'] = img
-        self.caption_size_label = ttk.Label(self.main_frame, text='Captions: -')
-        self.progress_frame = ttk.Frame(self.main_frame)
-        self.status_label = ttk.Label(self.progress_frame, text='Initializing..')
-        self.progress_label = ttk.Label(self.progress_frame, text='-')
-        self.progress_bar = ttk.Progressbar(self.progress_frame, orient=HORIZONTAL, mode='determinate', length=480, bootstyle='primary')
-        self.time_remaining = ttk.Label(self.progress_frame, text='Time remaining: ')
-        
+        self.main_frame = ttk.Labelframe(self, text= 'Checking Availability', padding=10)
+        status_label = ttk.Label(self.main_frame, text='Checking video availability..')
+        self.progress_frame = ttk.Frame(self.main_frame, padding=10)
+        self.video_count = ttk.Label(self.progress_frame, text=f'0 of {len(self.vd.VIDEO_LIST)} videos')
+        self.count_bar = ttk.Progressbar(self.progress_frame, orient=HORIZONTAL, mode='determinate', length=480, bootstyle='primary', maximum=len(self.parent.selected_videos))
 
         self.main_frame.pack(expand=TRUE, fill=BOTH, padx=10, pady=(10,20))
-        self.thumbnail_size_label.pack(anchor=NW)
-        self.thumbnail_image.pack(anchor=NW)
-        self.caption_size_label.pack(anchor=NW)
-        self.progress_frame.pack(side=BOTTOM, pady=(0,10))
-        self.status_label.pack(anchor=NW)
-        self.progress_label.pack(anchor=NW)
-        self.progress_bar.pack(pady=(5,0))
-        self.time_remaining.pack(pady=(5,0), anchor=NW)
-        self.protocol('WM_DELETE_WINDOW', self.close_alert)
+        status_label.pack()
+        self.progress_frame.pack(pady=(0,10))
+        self.video_count.pack()
+        self.count_bar.pack(pady=(5,0))
+        
+        def increment_value(percentage_completed):
+            self.count_bar['value'] = percentage_completed
+            self.video_count['text'] = f'{percentage_completed} of {len(self.parent.selected_videos)} videos'
+            self.update()
+        
+        a = self.vd.check_stream_availability(self.parent.selected_videos, self.parent.FORMAT, self.parent.list_filter.get(), self.parent.SCALE_LABELS[int(self.parent.custom_res_slider.get())], self.parent.playlist_res, increment_value)
 
+        status_label.destroy()
+        for a in self.progress_frame.winfo_children():
+            a.destroy
+        self.progress_frame.destroy()
+
+        list_frame = ttk.Frame(self.main_frame, borderwidth=3)
+        self.availability_list = ttk.Treeview(list_frame, height=12 , columns=['video', 'available?'], show='headings', selectmode='none')
+        self.availability_list.heading('video', text='video')
+        self.availability_list.heading('available?', text='available?')
+       
+        self.availability_list.column('video', width=200, anchor=NW)
+        self.availability_list.column('available?', width=50, anchor=CENTER)
+
+        self.vscroll = ttk.Scrollbar(list_frame, orient='vertical', bootstyle='primary', command=self.availability_list.yview)
+        self.availability_list.config(yscrollcommand=self.vscroll.set)
+
+
+        unavailable_vid_label = ttk.Label(self.main_frame, text='Unavailable videos: ')
+
+        list_frame.pack(expand=TRUE, fill=X)
+        self.vscroll.pack(side=RIGHT, fill=Y)
+        self.availability_list.pack(anchor=NW, fill=X, expand=True)
+        unavailable_vid_label.pack(anchor=NW, padx=(20,0))
+
+        vid = 0
+        for video in self.parent.selected_videos:
+            if self.vd.VIDEO_STREAMS[self.parent.selected_videos.index(video)] != '':
+                self.availability_list.insert(parent='', index='end', iid=video[1], values=(
+                    video[0],
+                    '✓'
+                ))
+            else:
+                self.availability_list.insert(parent='', index='end', iid=video[1], values=(
+                    video[0],
+                    '✗'
+                ))
+                vid += 1
+        
+        unavailable_vid_label['text'] = f'Unavailable videos: {vid}'
+        
+        """
         a = self.prepare()
         
         if a:
             self.update()
             threading.Thread(target=self.download, daemon=True).start()
-
+        """
     
     def close_alert(self):
         i = messagebox.askyesno(
@@ -494,13 +532,14 @@ class Video_Toplevel(ttk.Toplevel):
     
     
     def prepare(self):
-        a = self.vd.prepare_directory(self, self.parent.using_id.get(), self.parent.create_folder.get())
-        if a == False:
+        
+        b = self.vd.prepare_directory(self, self.parent.using_id.get(), self.parent.create_folder.get())
+        if b == False:
             self.parent.download_button['state'] = ttk.NORMAL
             config.IS_DOWNLOADING = False
             self.destroy()
         
-        b = self.vd.prepare_items(
+        c = self.vd.prepare_items(
             self,
             self.parent.FORMAT,
             self.parent.caption_is_srt.get(),
@@ -508,7 +547,7 @@ class Video_Toplevel(ttk.Toplevel):
             self.parent.download_thumbnail.get()
         )
 
-        if b != False:
+        if c != False:
             thumb_size, sub_size, self.caption = b
             if self.parent.download_thumbnail.get():
                 self.thumbnail_size_label['text'] = f'Thumbnail: {thumb_size}'

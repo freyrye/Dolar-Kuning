@@ -17,6 +17,7 @@ class Playlist_Downloader:
         self.URL = ''
         self.PLAYLIST = None
         self.VIDEO_LIST = []
+        self.VIDEO_STREAMS= []
         self.DESCRIPTION = {}
         self.DIRECTORY = 'C:/Users/User/Downloads'
         self.FILENAME = ''
@@ -78,19 +79,83 @@ class Playlist_Downloader:
                 a['video'] = v
                 a['title'] = v.title
                 a['author'] = v.author
+                a['thumbnail_url'] = v.thumbnail_url
+                a['thumbnail_data'] = self.get_thumbnail(a['thumbnail_url'])
                 a['length'] = v.length
+                a['streams'] = v.streams
+                print(a['streams'])
                 self.VIDEO_LIST.append(a)
             except :
                 self.unavailable_videos += 1
                 continue
     
     def retrieve_video_streams(self):
-        for v in self.PLAYLIST.videos:
             pass
+    
+
+    def get_thumbnail(self, url):
+        img_data = requests.get(url).content
+        return img_data
 
         
 
-        
+    def check_stream_availability(self, videos, video_format, filter, res, default_quality, callback):
+        self.VIDEO_STREAMS = []
+        for video in videos:
+            try:
+                if filter < 2:
+                    if filter == 0:
+                        a = self.VIDEO_LIST[video[1]]['streams'].filter(file_extension=video_format, progressive = True).order_by('filesize')
+                        print(a)
+                    else:
+                        a = self.VIDEO_LIST[video[1]]['streams'].filter(file_extension=video_format, only_video = True).order_by('filesize')
+                        print(a)
+
+                    if not a == []:
+                        b = a.get_by_resolution(f'{res}p')
+
+                        if b == None:
+                            if default_quality == 'hi':
+                                stream = a.first()
+                            else:
+                                stream = a.last()
+                        else:
+                            stream = b
+                        
+                        self.VIDEO_STREAMS.append(stream)
+                    else:
+                        self.VIDEO_STREAMS.append('')
+
+                else:
+                        a = self.VIDEO_LIST[video[1]]['streams'].filter(file_extension=video_format, only_audio = True).order_by('filesize')
+                        if not a == []:
+                            print(a)
+                            if default_quality == 'hi':
+                                stream = a.first()
+                            else:
+                                stream = a.last()
+                            
+                            self.VIDEO_STREAMS.append(stream)
+                        else:
+                            self.VIDEO_STREAMS.append('')
+
+                print(self.VIDEO_STREAMS[videos.index(video)])
+                
+            except Exception as e:
+                print(e)
+                self.VIDEO_STREAMS.append('')
+            
+            
+            callback(len(self.VIDEO_STREAMS))
+
+            
+
+                    
+            
+
+
+
+
     def get_formatted_size(self, total_size, factor=1024, suffix='B'):
         # looping through the units
         for unit in ["", "k", "M", "G", "T", "P", "E", "Z"]:
@@ -107,11 +172,6 @@ class Playlist_Downloader:
                 id = id + char[random.randint(0, len(char)-1)]
             
             return id
-    
-    def get_thumbnail(self):
-        img_data = requests.get(self.DESCRIPTION['thumbnail_url']).content
-        self.DESCRIPTION['thumbnail_data'] = img_data
-        self.DESCRIPTION['thumbnail'] = ImageTk.PhotoImage(Image.open(BytesIO(img_data)).resize((340,191)))
     
     def prepare_directory(self, parent, use_id, create_folder):
         if use_id:

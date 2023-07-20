@@ -12,12 +12,17 @@ from io import BytesIO
 class Video_Downloader:
     def __init__(self, parent):
         self.PARENT = parent
+        self.reset_variables()
+    
+
+    def reset_variables(self):
         self.URL = ''
         self.VIDEO = None
         self.DESCRIPTION = {}
         self.DIRECTORY = 'C:/Users/User/Downloads'
-        self.FILENAME = ''
+        self.FILENAME = []
         self.STREAM = ''
+        self.CAPTIONS = ''
         self.STREAM_DATA = {
             'mp4': [],
             'mp4v': [],
@@ -57,31 +62,24 @@ class Video_Downloader:
     
     def get_video_description(self):
         self.DESCRIPTION['title'] = self.VIDEO.title
-        self.FILENAME = self.DESCRIPTION['title']
+        self.FILENAME[0] = self.DESCRIPTION['title']
         self.DESCRIPTION['length'] = self.VIDEO.length
         self.DESCRIPTION['author'] = self.VIDEO.author
         self.DESCRIPTION['publish_date'] = self.VIDEO.publish_date
         self.DESCRIPTION['views'] = self.VIDEO.views
         self.DESCRIPTION['description'] = self.VIDEO.description
         self.DESCRIPTION['thumbnail_url'] = self.VIDEO.thumbnail_url
-        self.DESCRIPTION['random_id'] = self.generate_random_id(15)
-        self.DESCRIPTION['captions'] = self.VIDEO.captions
+        self.DESCRIPTION['captions']
         self.DESCRIPTION['captions_lang'] = []
         self.DESCRIPTION['captions_codes'] = []
-        for a in self.DESCRIPTION['captions']:
+        for a in self.VIDEO.captions:
+            self.DESCRIPTION['captions'][a.name]['srt'] = a.generate_srt_captions()
+            self.DESCRIPTION['captions'][a.name]['xml'] = a.xml_captions
             self.DESCRIPTION['captions_lang'].append(a.name)
             self.DESCRIPTION['captions_codes'].append(a.code)
         self.get_stream_data()
     
     def get_stream_data(self):
-        self.STREAM_DATA = {
-            'mp4': [],
-            'webm': [],
-            'mov': [],
-            'ogg': [],
-            '3gp': []
-            }
-        
         for st in self.STREAM_DATA:
             for stream in self.VIDEO.streams.filter(file_extension=st).order_by('filesize').desc():
                 print(stream)
@@ -121,43 +119,56 @@ class Video_Downloader:
         self.DESCRIPTION['thumbnail_data'] = img_data
         self.DESCRIPTION['thumbnail'] = ImageTk.PhotoImage(Image.open(BytesIO(img_data)).resize((340,191)))
     
-    def prepare_directory(self, parent, use_id, create_folder):
-        if use_id:
-            self.FILENAME = f'{self.FILENAME} - {self.DESCRIPTION["random_id"]}'
-        
-        self.FILENAME = self.FILENAME.replace(':','').replace('\\','').replace('/','').replace('?','').replace('*','').replace('"','').replace('<','').replace('>','').replace('|','')
-        
-        #check if folder already exists and if user chooses to create a folder
-        _dir = os.path.join(self.DIRECTORY, self.FILENAME)
-        if create_folder:
-            if os.path.isdir(_dir):
-                warning = messagebox.askokcancel(
-                    title='Folder already exists',
-                    message=f'Folder "{self.FILENAME}" has already exist. Replace existing folder?',
-                    parent = parent
-                )
+    def replace_filename(self):
+        self.FILENAME[0] = self.FILENAME[0].replace(':','').replace('\\','').replace('/','').replace('?','').replace('*','').replace('"','').replace('<','').replace('>','').replace('|','')
 
-                #deletes existing folder an replace it with an empty one
-                if warning:
-                    shutil.rmtree(_dir)
+    def prepare_directory(self, parent, use_id, create_folder):
+        try:
+            if use_id:
+                self.FILENAME[0] = f'{self.FILENAME[0]} - {self.DESCRIPTION["random_id"]}'
+            
+            self.replace_filename()
+            
+            #check if folder already exists and if user chooses to create a folder
+            _dir = os.path.join(self.DIRECTORY, self.FILENAME[0])
+            if create_folder:
+                if os.path.isdir(_dir):
+                    warning = messagebox.askokcancel(
+                        title='Folder already exists',
+                        message=f'Folder "{self.FILENAME[0]}" has already exist. Replace existing folder?',
+                        parent = parent
+                    )
+
+                    #deletes existing folder an replace it with an empty one
+                    if warning:
+                        shutil.rmtree(_dir)
+                        os.mkdir(_dir)
+                        self.DIRECTORY = _dir
+                    else:
+                        return False
+                else:
                     os.mkdir(_dir)
                     self.DIRECTORY = _dir
-                else:
-                    return False
-            else:
-                os.mkdir(_dir)
-                self.DIRECTORY = _dir
-    
+        except Exception as e:
+            messagebox.showerror(
+                title='Error',
+                message=f'There\'s an error while downloading the video:\n{e}\nTry checking your internet connection.'
+            )
 
-    def prepare_items(self, parent, video_format, sub_format, sub_lang, download_thumb):
+    def prepare_items(self, parent, video_format, sub_format, sub_lang, download_thumb, callback):
+    
         existing_files = []
         
         sub_size = 0
         thumb_size = 0
         caption = ''
         
-        if  download_thumb and os.path.exists(os.path.join(self.DIRECTORY, 'thumbnail.png')):
-            existing_files.append('thumbnail.png')
+        self.FILENAME[1] = ''
+        if  download_thumb:
+            self.FILENAME[1] = 'thumbnail.png'
+            if os.path.exists(os.path.join(self.DIRECTORY, 'thumbnail.png')):
+                existing_files.append('thumbnail.png')
+        
         
         thumb_size = self.get_formatted_size(sys.getsizeof(self.DESCRIPTION['thumbnail_data']))
         
@@ -165,21 +176,23 @@ class Video_Downloader:
         if sub_lang != 'none':
             
             if sub_format:
-                caption = self.VIDEO.captions[self.DESCRIPTION['captions_codes'][self.DESCRIPTION['captions_lang'].index(sub_lang)]].generate_srt_captions()
+                caption = self.DESCRIPTION['captions'][sub_lang].generate_srt_captions()
                 if os.path.exists(os.path.join(self.DIRECTORY, 'captions.srt')):
                     existing_files.append('captions.srt')
+                self.FILENAME[2] = 'captions.srt'
             else:
-                caption = self.VIDEO.captions[self.DESCRIPTION['captions_codes'][self.DESCRIPTION['captions_lang'].index(sub_lang)]].xml_captions
+                caption = self.DESCRIPTION['captions'][sub_lang].xml_captions
                 if os.path.exists(os.path.join(self.DIRECTORY, 'captions.xml')):
                     existing_files.append('captions.xml')
+                self.FILENAME[2] = 'captions.xml'
             
             sub_size = self.get_formatted_size(sys.getsizeof(caption))
         
 
-        self.FILENAME = self.FILENAME +'.' + str(video_format)
+        self.FILENAME[0] = self.FILENAME[0] +'.' + str(video_format)
         
-        if os.path.exists(os.path.join(self.DIRECTORY, self.FILENAME)):
-            existing_files.append(self.FILENAME)
+        if os.path.exists(os.path.join(self.DIRECTORY, self.FILENAME[0])):
+            existing_files.append(self.FILENAME[0])
         
         print(len(existing_files))
         if len(existing_files) != 0:
@@ -206,4 +219,26 @@ class Video_Downloader:
             else:
                 return False
         
-        return thumb_size, sub_size, caption
+        self.CAPTIONS = caption
+        self.VIDEO.register_on_progress_callback(callback)
+        return thumb_size, sub_size
+    
+
+    def download_video(self, parent, callback, selected_itag):
+        if self.FILENAME[1] != '':
+            with open(os.path.join(self.DIRECTORY, 'thumbnail.png'), 'wb') as f:
+                    f.write(self.DESCRIPTION['thumbnail_data'])
+
+        if self.FILENAME[2] != '':
+            with open(os.path.join(self.DIRECTORY, self.FILENAME[2]), 'w', encoding='utf-8') as f:
+                        f.write(self.CAPTIONS)
+        
+
+        stream = self.VIDEO.streams.get_by_itag(selected_itag)
+        stream.download(filename=self.FILENAME[0], output_path=self.DIRECTORY)
+        
+
+
+
+        
+
