@@ -1,10 +1,13 @@
 import ttkbootstrap as ttk
+import tkinter as tk
 from tkinter.filedialog import asksaveasfilename
 from tkinter.messagebox import showerror
 from datetime import datetime
+from functools import partial
 import textwrap
+from functools import partial
 from PIL import Image, ImageTk
-from functions import Video, get_formatted_size, get_formatted_time, resource_path
+from functions import Video, get_formatted_size, get_formatted_time, resource_path, set_appwindow
 import threading
 import os
 
@@ -15,19 +18,22 @@ class Application(ttk.Window):
             super().__init__(title='Dolar Kuning || YT Video Downloader', themename='solar')
             self.geometry(self.center_window())
             self.resizable(0,0)
-            self.overrideredirect(False)
+            self.overrideredirect(True)
             self.iconbitmap(resource_path('images/logo.ico'))
 
             self.title_bar = Custom_Titlebar(self)
             self.video_gui = Video_GUI(self)
 
+            self.title_bar.pack(expand=False, fill='x', anchor='n')
             self.video_gui.pack(expand=True, fill='both')
+
+            self.after(10, lambda: set_appwindow(self))
         except Exception as e:
             self.error_msg(e)
     
     def center_window(self):
         window_width = 600
-        window_height = 700
+        window_height = 750
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
         x = (screen_width /2) - (window_width /2)
@@ -39,23 +45,53 @@ class Application(ttk.Window):
         exit()
 
 
-class Custom_Titlebar(ttk.Frame):
+class Custom_Titlebar(tk.Frame):
     def __init__(self, master:ttk.Window):
-        super().__init__(master, style='warning', height=46)
+        super().__init__(master, bg='#00232b', height=50, autostyle=False)
+        self.pack_propagate(False)
         font = ('Helvetica',14)
-
         self.master = master
-        self.title = ttk.Label(self, text=self.master.title(), font=font)
-        self.close_button = ttk.Label(self, text='X', font=font)
+        self.logo = tk.Label(self, autostyle=False, bg='#00232b')
+        img = ImageTk.PhotoImage(Image.open(resource_path('images/logo.png')).convert('RGBA').resize((30,30)))
+        self.logo.image = img
+        self.logo['image'] = img
+        self.title = tk.Label(self, text='Dolar Kuning', bg='#00232b', fg='white',  font=font, autostyle=False)
+        self.minimize_button = tk.Label(self, text='–', bg='#00232b', fg='white',  font=font, autostyle=False)
+        self.close_button = tk.Label(self, text='\u2715', bg='#00232b', fg='white',  font=font, autostyle=False)
         self.close_button.bind('<Button-1>', self.close)
+        self.minimize_button.bind('<Button-1>', self.minimize)
 
+        self.logo.pack(side='left', padx=(20,0))
+        self.title.pack(side='left', padx=(10,0))
         self.close_button.pack(side='right', padx=(0,20))
+        self.minimize_button.pack(side='right', padx=(0,20))
+        self.bind('<B1-Motion>', self.move)
+        self.bind('<Map>', self.frame_mapped)
+
+        self.close_button.bind("<Enter>", partial(self.color_config, self.close_button, "#bc951a"))
+        self.close_button.bind("<Leave>", partial(self.color_config, self.close_button, "white"))
+        self.minimize_button.bind("<Enter>", partial(self.color_config, self.minimize_button, "#bc951a"))
+        self.minimize_button.bind("<Leave>", partial(self.color_config, self.minimize_button, "white"))
+        
+    
+    def color_config(self, widget, color, e):
+        widget.configure(foreground=color)
 
     def close(self, e):
         self.master.quit()
     
     def move(self, e):
-        self.master.geometry()
+        self.master.geometry(f'+{e.x_root - self.master.winfo_width()//2}+{e.y_root}')
+    
+    def minimize(self, e):
+        self.master.update_idletasks()
+        self.master.overrideredirect(False)
+        self.master.state('iconic')
+
+    def frame_mapped(self,e):
+        self.master.update_idletasks()
+        self.master.overrideredirect(True)
+        self.master.state('normal')
 
 # https://www.youtube.com/watch?v=mlKQP9SY5-Y
         # https://www.youtube.com/shorts/u-QsIa7VdCI?feature=share
@@ -95,6 +131,11 @@ class Video_GUI(ttk.Frame):
         self.download_button.pack()
 
         self.url_entry.bind('<Return>', lambda e: threading.Thread(target=self.check_url, daemon=True).start())
+        self.url_entry.bind('<FocusOut>', lambda e: self.clear_alert())
+        self.url_entry.bind('<Key>', lambda e: self.clear_alert())
+
+    def clear_alert(self):
+        self.url_alert['text'] = ''
     
     def error_msg(self, msg):
         showerror('Fatal Error', message=f'ERROR:\n{msg}')
@@ -103,24 +144,31 @@ class Video_GUI(ttk.Frame):
 
     def check_url(self):
         self.url_entry['state'] = 'disabled'
+        self.file_dropdown['state'] = 'disabled'
+        self.download_button['state'] = 'disabled'
         check = self.video_obj.check_url(self.VIDEO_URL.get(), self.error_msg)
 
-        if check == 'empty':
-            self.url_alert['text'] = 'Insert video URL'
-        elif check == 'invalid':
-            self.url_alert['text'] = 'Invalid URL'
-        elif check == 'age-restricted':
-            self.url_alert['text'] = 'This video is age-restricted'
-        elif check == 'live':
-            self.url_alert['text'] = 'This video is a live stream'
-        elif check == 'blocked':
-            self.url_alert['text'] = 'This video is blocked in your region'
-        elif check == 'private':
-            self.url_alert['text'] = 'This video is private'
-        elif check == 'unavailable':
-            self.url_alert['text'] = 'This video is unavailable'
-        elif check != 'valid':
-            self.url_alert['text'] = check
+        if check != 'valid':
+            if check == 'empty':
+                self.url_alert['text'] = 'Insert video URL'
+            elif check == 'invalid':
+                self.url_alert['text'] = 'Invalid URL'
+            elif check == 'age-restricted':
+                self.url_alert['text'] = 'This video is age-restricted'
+            elif check == 'live':
+                self.url_alert['text'] = 'This video is a live stream'
+            elif check == 'blocked':
+                self.url_alert['text'] = 'This video is blocked in your region'
+            elif check == 'private':
+                self.url_alert['text'] = 'This video is private'
+            elif check == 'unavailable':
+                self.url_alert['text'] = 'This video is unavailable'
+            else:
+                self.url_alert['text'] = check
+            
+            if self.video_obj.VIDEO != None:
+                self.file_dropdown['state'] = 'readonly'
+                self.download_button['state'] = 'normal'
         else:
             self.url_alert['text'] = ''
             self.show_data()
@@ -174,14 +222,16 @@ class Video_GUI(ttk.Frame):
 
 class Download_Toplevel(ttk.Toplevel):
     def __init__(self, parent:Video_GUI, itag, dir):
-        super().__init__(title='Downloading...', size=(600,160), resizable=(False, False))
+        super().__init__(title='Downloading...', size=(600,210), resizable=(False, False))
 
-        self.iconbitmap(resource_path('images/logo.ico'))
+        self.overrideredirect(True)
         self.main_frame = ttk.Frame(self)
         self.parent = parent
         self.dir = dir
         self.itag = itag
         self.grab_set()
+
+        self.title_bar = Custom_Titlebar(self)
 
         frame_a = ttk.Frame(self.main_frame)
         self.percentage_label = ttk.Label(frame_a, text='-')
@@ -191,6 +241,7 @@ class Download_Toplevel(ttk.Toplevel):
         self.time_remaining_label = ttk.Label(frame_a, text='Time remaining:\t-')
         self.speed_label = ttk.Label(frame_a, text='Speed:\t-')
         
+        self.title_bar.pack(expand=False, fill='x', anchor='n')
         self.main_frame.pack(expand=True, fill='both', padx=20, pady=20)
         ttk.Label(self.main_frame, text='Downloading').pack()
         frame_a.pack(expand=True, fill='both')
