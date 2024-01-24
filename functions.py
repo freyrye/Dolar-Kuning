@@ -25,7 +25,8 @@ def set_appwindow(root):
 
 
 class Video:
-    def __init__(self):
+    def __init__(self, mode):
+        self.MODE = mode
         self.VIDEO = None
         self.VID_DATA = {
             'title':str,
@@ -34,6 +35,7 @@ class Video:
             'thumbnail':str
         }
         self.STREAM_DATA = []
+        self.CAPTION_DATA = []
         
     def check_url(self, url, error_callback):
         if url == '' or url == 'Insert video URL':
@@ -61,10 +63,12 @@ class Video:
         except Exception as e:
             return e
         else:
+            if self.MODE == 2 and len(vid.captions) < 1:
+                return  'no-captions'
             self.VIDEO = vid
             self.get_data(error_callback)
             return 'valid'
-    
+
     def get_thumbnail(self, url):
         img_data = requests.get(url).content
         img = ImageTk.PhotoImage(Image.open(BytesIO(img_data)).resize((420,235)))
@@ -76,7 +80,10 @@ class Video:
             self.VID_DATA['author'] = self.VIDEO.author
             self.VID_DATA['length'] = self.VIDEO.length
             self.VID_DATA['thumbnail'] = self.get_thumbnail(self.VIDEO.thumbnail_url)
-            self.STREAM_DATA = self.VIDEO.streams
+            if self.MODE == 1:
+                self.STREAM_DATA = self.VIDEO.streams
+            else:
+                self.CAPTION_DATA = self.VIDEO.captions
         except Exception as e:
             error_callback(e)
     
@@ -118,3 +125,7 @@ def resource_path(relative_path):
         base_path = os.path.abspath(".")
 
     return os.path.join(base_path, relative_path)
+
+def rreplace(s, old, new, occurrence):
+    li = s.rsplit(old, occurrence)
+    return new.join(li)
