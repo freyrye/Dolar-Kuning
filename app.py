@@ -138,8 +138,8 @@ class Selection_Screen(ttk.Frame):
         ttk.Label(self, text='Dolar Kuning', font=('Helvetica', 25, 'bold')).pack(pady=(0,15))
         self.img.pack(anchor='center')
         ttk.Label(self, text='Dolar Kuning is a GUI interface for Pytube made with Tkinter and TTKbootstrap.', font=('Helvetica', 12, 'italic'),wraplength=400, justify='center').pack(pady=(15,0))
-        self.vid_button.pack(pady=(60,0))
-        self.cap_button.pack(pady=(20,0))
+        self.vid_button.pack(pady=(60,0), anchor='center')
+        self.cap_button.pack(pady=(20,0), anchor='center')
 
 
 
