@@ -6,10 +6,12 @@ from datetime import datetime
 from functools import partial
 import textwrap
 from functools import partial
+from regex import findall
 from PIL import Image, ImageTk
-from functions import Video, get_formatted_size, get_formatted_time, resource_path, set_appwindow
+from functions import Video, get_formatted_size, get_formatted_time, resource_path, set_appwindow, rreplace
 import threading
 import os
+
 
 
 class Application(ttk.Window):
@@ -22,10 +24,10 @@ class Application(ttk.Window):
             self.iconbitmap(resource_path('images/logo.ico'))
 
             self.title_bar = Custom_Titlebar(self)
-            self.video_gui = Video_GUI(self)
+            self.selection_gui = Selection_Screen(self)
 
             self.title_bar.pack(expand=False, fill='x', anchor='n')
-            self.video_gui.pack(expand=True, fill='both')
+            self.selection_gui.pack(expand=True, fill='both')
 
             self.after(10, lambda: set_appwindow(self))
         except Exception as e:
@@ -43,19 +45,31 @@ class Application(ttk.Window):
     def error_msg(self, msg):
         showerror('Fatal Error', message=f'ERROR:\n{msg}')
         exit()
+    
+    def select_widget(self, widget, text):
+        self.selection_gui.destroy()
+        self.main_gui = widget
+        self.main_gui.pack(expand=True, fill='both')
+        self.title_bar.title_text.set(text)
 
 
 class Custom_Titlebar(tk.Frame):
     def __init__(self, master:ttk.Window):
+        global z
+        z = 0
         super().__init__(master, bg='#00232b', height=50, autostyle=False)
         self.pack_propagate(False)
         font = ('Helvetica',14)
         self.master = master
+        self.lastX = 0
+        self.lastY = 0
+
         self.logo = tk.Label(self, autostyle=False, bg='#00232b')
         img = ImageTk.PhotoImage(Image.open(resource_path('images/logo.png')).convert('RGBA').resize((30,30)))
         self.logo.image = img
         self.logo['image'] = img
-        self.title = tk.Label(self, text='Dolar Kuning', bg='#00232b', fg='white',  font=font, autostyle=False)
+        self.title_text = ttk.StringVar(value='Dolar Kuning')
+        self.title = tk.Label(self, textvariable=self.title_text, bg='#00232b', fg='white',  font=font, autostyle=False)
         self.minimize_button = tk.Label(self, text='–', bg='#00232b', fg='white',  font=font, autostyle=False)
         self.close_button = tk.Label(self, text='\u2715', bg='#00232b', fg='white',  font=font, autostyle=False)
         self.close_button.bind('<Button-1>', self.close)
@@ -65,6 +79,7 @@ class Custom_Titlebar(tk.Frame):
         self.title.pack(side='left', padx=(10,0))
         self.close_button.pack(side='right', padx=(0,20))
         self.minimize_button.pack(side='right', padx=(0,20))
+        self.bind('<Button-1>', self.get_pos)
         self.bind('<B1-Motion>', self.move)
         self.bind('<Map>', self.frame_mapped)
 
@@ -81,25 +96,57 @@ class Custom_Titlebar(tk.Frame):
         self.master.quit()
     
     def move(self, e):
-        self.master.geometry(f'+{e.x_root - self.master.winfo_width()//2}+{e.y_root}')
+        x, y = e.x - self.lastX + self.master.winfo_x(), e.y - self.lastY + self.master.winfo_y()
+        self.master.geometry("+%s+%s" % (x , y))
+    
+    def get_pos(self, e):
+        self.lastX = e.x
+        self.lastY = e.y
     
     def minimize(self, e):
+        global z
         self.master.update_idletasks()
         self.master.overrideredirect(False)
         self.master.state('iconic')
+        z = 1
 
     def frame_mapped(self,e):
+        global z
         self.master.update_idletasks()
         self.master.overrideredirect(True)
         self.master.state('normal')
+        if z == 1:
+            self.master.after(10, lambda: set_appwindow(self.master))
+            z = 0
 
 # https://www.youtube.com/watch?v=mlKQP9SY5-Y
         # https://www.youtube.com/shorts/u-QsIa7VdCI?feature=share
 
-class Video_GUI(ttk.Frame):
+
+class Selection_Screen(ttk.Frame):
     def __init__(self, master):
         super().__init__(master, padding=20)
-        self.video_obj = Video()
+        self.master = master
+        self.img = ttk.Label(self)
+        img = ImageTk.PhotoImage(Image.open(resource_path('images/logo.png')).convert('RGBA').resize((256,256)))
+        self.img.image = img
+        self.img['image'] = img
+
+        self.vid_button = ttk.Button(self, text='Download Video', style='primary outline', command=lambda: self.master.select_widget(Video_GUI(self.master, 1), 'Download Video'))
+        self.cap_button = ttk.Button(self, text='Download Caption', style='primary outline', command=lambda: self.master.select_widget(Caption_GUI(self.master, 2), 'Download Caption'))
+        
+        ttk.Label(self, text='Dolar Kuning', font=('Helvetica', 25, 'bold')).pack(pady=(0,15))
+        self.img.pack(anchor='center')
+        ttk.Label(self, text='Dolar Kuning is a GUI interface for Pytube made with Tkinter and TTKbootstrap.', font=('Helvetica', 12, 'italic'),wraplength=400, justify='center').pack(pady=(15,0))
+        self.vid_button.pack(pady=(60,0))
+        self.cap_button.pack(pady=(20,0))
+
+
+
+class Base_GUI_Template(ttk.Frame):
+    def __init__(self, master, mode):
+        super().__init__(master, padding=20)
+        self.video_obj = Video(mode=mode)
         
         self.VIDEO_URL = ttk.StringVar()
 
@@ -163,6 +210,8 @@ class Video_GUI(ttk.Frame):
                 self.url_alert['text'] = 'This video is private'
             elif check == 'unavailable':
                 self.url_alert['text'] = 'This video is unavailable'
+            elif check =='no-captions':
+                self.url_alert['text'] = 'No captions found'
             else:
                 self.url_alert['text'] = check
             
@@ -183,7 +232,43 @@ class Video_GUI(ttk.Frame):
         self.video_length['text'] = f'Length:\t{get_formatted_time(self.video_obj.VID_DATA['length'])}'
         self.thumbnail_image.image = self.video_obj.VID_DATA['thumbnail']
         self.thumbnail_image['image'] = self.video_obj.VID_DATA['thumbnail']
+        self.get_file_data()
 
+
+    def get_file_data(self):
+        pass
+
+    def download_video(self):
+        pass
+
+    def disable_children(self):
+        self.url_entry['state'] = 'disabled'
+        self.file_dropdown['state'] = 'disabled'
+        self.download_button['state'] = 'disabled'
+    
+    def enable_children(self):
+        self.url_entry['state'] = 'normal'
+        self.file_dropdown['state'] = 'readonly'
+        self.download_button['state'] = 'normal'
+
+    
+
+
+
+class Video_GUI(Base_GUI_Template):
+    def __init__(self, master, mode):
+        super().__init__(master, mode)
+        
+    def show_data(self):
+        self.video_title['text'] = f'Title:\t{textwrap.shorten(str(self.video_obj.VID_DATA['title']), width=50, placeholder='...')}'
+        self.video_author['text'] = f'Author:\t{self.video_obj.VID_DATA['author']}'
+        self.video_length['text'] = f'Length:\t{get_formatted_time(self.video_obj.VID_DATA['length'])}'
+        self.thumbnail_image.image = self.video_obj.VID_DATA['thumbnail']
+        self.thumbnail_image['image'] = self.video_obj.VID_DATA['thumbnail']
+        self.get_file_data()
+
+
+    def get_file_data(self):
         streams = []
         for stream in (self.video_obj.STREAM_DATA):
             if stream.is_progressive:
@@ -213,11 +298,57 @@ class Video_GUI(ttk.Frame):
         if path:
             self.disable_children()
             Download_Toplevel(self, itag, self.video_obj.separate_path(path))
-    
-    def disable_children(self):
-        self.url_entry['state'] = 'disabled'
-        self.file_dropdown['state'] = 'disabled'
-        self.download_button['state'] = 'disabled'
+            self.enable_children()
+
+
+
+
+
+
+class Caption_GUI(Base_GUI_Template):
+    def __init__(self, master, mode):
+        super().__init__(master, mode)
+
+    def get_file_data(self):
+        captions = []
+        for caption in (self.video_obj.CAPTION_DATA):
+            captions.append(f'SRT - {caption.name} ({caption.code})')
+        
+        for caption in (self.video_obj.CAPTION_DATA):
+            captions.append(f'XML - {caption.name} ({caption.code})')
+        
+        print(captions)
+        
+        self.file_dropdown['values'] = captions
+        self.file_dropdown.current(0)
+
+    def download_video(self):
+        selection = self.file_dropdown.get()
+        print(selection)
+        index = self.file_dropdown['values'].index(selection)
+        print(index)
+        caption = self.video_obj.CAPTION_DATA[findall(r'\(([^)]+)\)', selection)[-1]]
+
+        code = caption.code
+        print(code)
+        extension = selection[:3].lower()
+        print(extension)
+        print(self.video_obj.VID_DATA['title'])
+        path = asksaveasfilename(title='Download Caption', defaultextension=extension, initialfile=f'{self.video_obj.VID_DATA['title']} - {code}', filetypes=((f"{extension.upper()} file", f"*.{extension}"),("All Files", "*.*") ))
+        #NOTE: I commented line 146 in pytube/captions.py to prevent pytube adding the caption language to the filename :v
+        
+        
+        print(path)
+        print(self.video_obj.separate_path(path))
+        dir, name = self.video_obj.separate_path(path)
+        if path:
+            self.disable_children()
+            try:
+                caption.download(title=name,srt=(extension=='srt'), output_path=dir)
+            except Exception as e:
+                self.error_msg(e)
+            self.enable_children()
+
 
 
 class Download_Toplevel(ttk.Toplevel):
@@ -286,9 +417,6 @@ class Download_Toplevel(ttk.Toplevel):
 
 
     def close(self):
-        self.parent.url_entry['state'] = 'normal'
-        self.parent.file_dropdown['state'] = 'normal'
-        self.parent.download_button['state'] = 'normal'
         self.destroy()
 
 
