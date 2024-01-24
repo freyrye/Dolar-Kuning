@@ -12,6 +12,8 @@ open the .exe file in the `executables` folder.
 
 ## Versions
 
+* ver. 1.0.2:  
+*added the ability to download captions, updated UI*
 * ver. 1.0.1:  
 *added custom titlebar, minor UI fix*
 * ver. 1.0:  
